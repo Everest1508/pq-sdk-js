@@ -1,135 +1,288 @@
-# PQ SDK Agent Prompts
+# PQ SDK Framework Instructions for Agents
 
-Copy one of these prompts into an AI coding agent when you want it to add
-`pq-befu` to an application. Replace the bracketed values before sending it.
+Use the section that matches the application's framework. Each section has an
+exact integration pattern followed by a copy/paste instruction for a coding
+agent.
 
-## Universal integration
+## Shared configuration
 
-```text
-Integrate the pq-befu SDK into this Node.js application for PQ Platform error
-tracking, feedback, and ticketing.
+Install the SDK:
 
-First inspect the project to identify its runtime, framework, entry point, and
-existing error-handling conventions. Then install pq-befu and make the smallest
-production-ready change that:
+```bash
+npm install pq-befu
+```
 
-- creates one PQClient using PQ_API_KEY and PQ_BASE_URL (do not hardcode
-  secrets; use http://localhost:8000 only as the local default);
-- sets environment from NODE_ENV, falling back to "development";
-- captures unhandled server errors through the appropriate framework adapter;
-- preserves existing error responses and error handlers;
-- adds a graceful-shutdown flush where the process can exit immediately;
-- includes one deliberate, caught-error example using captureException where it
-  fits the app's conventions; and
-- documents the required environment variables.
+Set these server-side environment variables. Never commit or expose `PQ_API_KEY`
+to a browser or Electron renderer.
 
-Use only public pq-befu APIs. Run the relevant tests or type checks after the
-change, and summarize the files changed plus any configuration I must provide.
+```bash
+PQ_API_KEY=your_api_key
+PQ_BASE_URL=https://your-pq-platform.example
+NODE_ENV=production
+```
+
+For every server framework, create **one** client during application startup:
+
+```js
+const { PQClient } = require("pq-befu");
+
+const pq = new PQClient({
+  apiKey: process.env.PQ_API_KEY,
+  baseUrl: process.env.PQ_BASE_URL || "http://localhost:8000",
+});
+
+const environment = process.env.NODE_ENV || "development";
 ```
 
 ## Express
 
-```text
-Add pq-befu error tracking to this Express application. Inspect the existing
-bootstrap and middleware order first. Create a shared PQClient from PQ_API_KEY
-and PQ_BASE_URL, then use pqExpress from pq-befu/integrations/express.
+### Required placement
 
-Register its middleware before routes and its errorHandler after all routes.
-Pass environment: process.env.NODE_ENV || "development". Preserve all current
-Express error behavior; do not replace the app's existing error handler or send
-duplicate responses. Add a graceful shutdown flush if appropriate. Do not
-hardcode secrets. Update the project's environment-variable documentation and
-run its relevant tests.
+1. Create `pq` and `environment` when the Express app starts.
+2. Call `app.use(middleware)` **before** declaring routes.
+3. Call `app.use(errorHandler)` **after** every route and before or alongside
+   the app's existing error middleware.
+4. Do not replace the app's error handler: PQ reports the error and calls
+   `next(err)`, so Express retains its normal response behavior.
+
+```js
+const express = require("express");
+const { PQClient } = require("pq-befu");
+const { pqExpress } = require("pq-befu/integrations/express");
+
+const app = express();
+const pq = new PQClient({
+  apiKey: process.env.PQ_API_KEY,
+  baseUrl: process.env.PQ_BASE_URL || "http://localhost:8000",
+});
+
+const { middleware, errorHandler } = pqExpress({
+  client: pq,
+  environment: process.env.NODE_ENV || "development",
+});
+
+app.use(middleware);
+app.get("/", (_req, res) => res.send("OK"));
+app.use(errorHandler);
+```
+
+### Agent instruction
+
+```text
+This is an Express app. Add pq-befu exactly as follows: create one PQClient at
+startup from process.env.PQ_API_KEY and process.env.PQ_BASE_URL (default the
+base URL only to http://localhost:8000), call pqExpress({ client: pq,
+environment: process.env.NODE_ENV || "development" }), register middleware
+before all routes, and register errorHandler after all routes. Keep the app's
+current error middleware and response behavior intact. Do not hardcode or expose
+the API key. Add a shutdown await pq.flush() only if the app already has a
+graceful shutdown handler. Document PQ_API_KEY and PQ_BASE_URL and run tests.
 ```
 
 ## Fastify
 
-```text
-Add pq-befu error tracking to this Fastify application. First find the main
-Fastify instance and its plugin-registration sequence. Create one shared
-PQClient using PQ_API_KEY and PQ_BASE_URL, then register pqFastify from
-pq-befu/integrations/fastify with the client and
-environment: process.env.NODE_ENV || "development".
+### Required placement
 
-Keep Fastify's existing error handling intact: the PQ plugin should report
-server failures but must not change response serialization or status behavior.
-Do not hardcode secrets. Add a shutdown flush if the app has an explicit close
-path, document the environment variables, and run relevant tests.
+1. Create `pq` before registering plugins.
+2. Register `pqFastify` once using `await app.register(...)`.
+3. Do not add a custom Fastify error handler for PQ. The plugin reports 5xx
+   errors while preserving Fastify's existing error serialization.
+
+```js
+const Fastify = require("fastify");
+const { PQClient } = require("pq-befu");
+const { pqFastify } = require("pq-befu/integrations/fastify");
+
+const app = Fastify();
+const pq = new PQClient({
+  apiKey: process.env.PQ_API_KEY,
+  baseUrl: process.env.PQ_BASE_URL || "http://localhost:8000",
+});
+
+await app.register(pqFastify, {
+  client: pq,
+  environment: process.env.NODE_ENV || "development",
+});
+```
+
+### Agent instruction
+
+```text
+This is a Fastify app. Create a single PQClient during bootstrap using
+PQ_API_KEY and PQ_BASE_URL, then register pqFastify from
+pq-befu/integrations/fastify exactly once with { client: pq, environment:
+process.env.NODE_ENV || "development" }. Preserve existing Fastify error
+handlers and serialization; do not add a replacement error handler. Keep API
+keys server-side, document required variables, and run tests.
 ```
 
 ## Koa
 
-```text
-Add pq-befu error tracking to this Koa application. Inspect middleware order
-and existing error handling. Create a shared PQClient from PQ_API_KEY and
-PQ_BASE_URL, then add pqKoa from pq-befu/integrations/koa near the start of the
-middleware chain with environment: process.env.NODE_ENV || "development".
+### Required placement
 
-The integration must re-throw errors so Koa and the application's existing
-error handler keep their current response behavior. Do not hardcode secrets.
-Add a shutdown flush if applicable, document the configuration, and run
-relevant tests.
+1. Create `pq` when the Koa app is created.
+2. Register `pqKoa` near the beginning of the middleware chain, before routes.
+3. Keep existing error middleware. `pqKoa` reports 5xx errors and re-throws
+   exceptions, allowing Koa to keep its original response behavior.
+
+```js
+const Koa = require("koa");
+const { PQClient } = require("pq-befu");
+const { pqKoa } = require("pq-befu/integrations/koa");
+
+const app = new Koa();
+const pq = new PQClient({
+  apiKey: process.env.PQ_API_KEY,
+  baseUrl: process.env.PQ_BASE_URL || "http://localhost:8000",
+});
+
+app.use(pqKoa(pq, {
+  environment: process.env.NODE_ENV || "development",
+}));
+// Register routes after this line.
+```
+
+### Agent instruction
+
+```text
+This is a Koa app. Create one server-side PQClient from PQ_API_KEY and
+PQ_BASE_URL, then add pqKoa(pq, { environment: process.env.NODE_ENV ||
+"development" }) near the start of the middleware chain, before routes. Do not
+catch or swallow errors for PQ and do not replace current error middleware:
+pqKoa must re-throw so Koa keeps its existing responses. Document the variables
+and run tests.
 ```
 
 ## NestJS
 
+### Required placement
+
+1. Install peer dependencies if the application does not already have them:
+   `npm install @nestjs/common rxjs`.
+2. In `AppModule`, add the PQ module to `imports`.
+3. The module registers a global interceptor, which reports only 5xx request
+   exceptions and then re-throws them. Existing exception filters stay active.
+
+```ts
+import { Module } from "@nestjs/common";
+import { PqSdkModule } from "pq-befu/integrations/nestjs";
+
+@Module({
+  imports: [
+    PqSdkModule.forRoot({
+      apiKey: process.env.PQ_API_KEY,
+      baseUrl: process.env.PQ_BASE_URL || "http://localhost:8000",
+      environment: process.env.NODE_ENV || "development",
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+### Agent instruction
+
 ```text
-Integrate pq-befu into this NestJS application. Inspect how AppModule and
-main.ts are structured, including existing global interceptors and exception
-filters. Choose the smallest fitting approach:
-
-- add PqSdkModule.forRoot({ apiKey, baseUrl }) to the module imports, or
-- create a PQClient and register PqInterceptor globally.
-
-Source apiKey and baseUrl from configuration or environment variables; never
-hardcode them. Use environment: process.env.NODE_ENV || "development" when
-using PqInterceptor. Do not alter existing exception filters, response shapes,
-or global interceptor ordering without explaining why. Document required
-variables and run relevant tests/build checks.
+This is a NestJS app. In AppModule, add PqSdkModule.forRoot from
+pq-befu/integrations/nestjs. Pass apiKey from process.env.PQ_API_KEY, baseUrl
+from process.env.PQ_BASE_URL with http://localhost:8000 as the local fallback,
+and environment from NODE_ENV with "development" fallback. Ensure @nestjs/common
+and rxjs are installed. Do not remove or reorder exception filters or existing
+global interceptors without explaining a concrete conflict. Keep the key out of
+client bundles, document configuration, and run the build/tests.
 ```
 
 ## Electron
 
-```text
-Add pq-befu to this Electron app for main-process and renderer error tracking.
-Inspect the app bootstrap and BrowserWindow creation first. In the main process,
-create a shared PQClient from PQ_API_KEY and PQ_BASE_URL and call
-pqElectronMain from pq-befu/integrations/electron with
-environment: process.env.NODE_ENV || "development".
+### Required placement
 
-For sandboxed renderers, set BrowserWindow webPreferences.preload to
-require.resolve("pq-befu/preload") and use window.pq in the renderer. For an
-existing custom preload, use pqElectronPreload only when it is compatible with
-the app's context-isolation setup. Do not expose API keys to renderers, weaken
-security settings, or hardcode secrets. Preserve existing preload behavior,
-document the configuration, and run relevant tests.
+1. In the **main process**, create the PQ client and call `pqElectronMain` once.
+2. For sandboxed renderers, set the `BrowserWindow` preload to the SDK's bundled
+   preload file. This exposes `window.pq` without giving the renderer the API
+   key.
+3. In renderer code, report an exception with `window.pq.captureException(err)`.
+
+```js
+// main.js
+const { BrowserWindow } = require("electron");
+const { PQClient } = require("pq-befu");
+const { pqElectronMain } = require("pq-befu/integrations/electron");
+
+const pq = new PQClient({
+  apiKey: process.env.PQ_API_KEY,
+  baseUrl: process.env.PQ_BASE_URL || "http://localhost:8000",
+});
+pqElectronMain(pq, { environment: process.env.NODE_ENV || "development" });
+
+const win = new BrowserWindow({
+  webPreferences: { preload: require.resolve("pq-befu/preload") },
+});
 ```
 
-## Browser, worker, or Deno
-
-```text
-Add PQ Platform reporting to this browser, web-worker, or Deno application
-using PQBrowserClient from pq-befu/browser. Find the application's config
-boundary and initialize the client with its intended public or safely injected
-configuration. Use captureException for caught errors and sendFeedback or
-createTicket only where the product already has those user actions.
-
-Do not embed a secret server API key into public client code. Preserve existing
-error handling and user experience, document the configuration approach, and
-run relevant checks.
+```js
+// renderer.js
+try {
+  await runAction();
+} catch (err) {
+  await window.pq.captureException(err);
+  throw err;
+}
 ```
 
-## Add a feature with PQ reporting
+### Agent instruction
 
 ```text
-Implement [FEATURE] in this application and add useful PQ Platform reporting
-with the existing pq-befu client. Before editing, find how the app obtains its
-PQClient and how it reports errors today. Capture unexpected exceptions with
-captureException and include relevant non-sensitive context such as environment,
-page, userRef, or request metadata.
-
-Do not report passwords, tokens, authorization headers, full request bodies, or
-other sensitive personal data. Do not swallow the original error or change the
-feature's user-facing error behavior merely to report it. Add focused tests and
-summarize what events will be sent.
+This is an Electron app. Integrate pq-befu in the main process only: construct
+one PQClient from PQ_API_KEY and PQ_BASE_URL, then call pqElectronMain(pq,
+{ environment: process.env.NODE_ENV || "development" }). For sandboxed
+renderers, set BrowserWindow.webPreferences.preload to
+require.resolve("pq-befu/preload") and use window.pq from renderer code. Never
+pass the API key to a renderer or weaken Electron security settings. Preserve an
+existing custom preload; merge the PQ bridge only when its context-isolation
+behavior remains safe. Document configuration and run tests.
 ```
+
+## Browser, web worker, or Deno
+
+### Required placement
+
+Use `PQBrowserClient`, which uses `fetch`, only where it is safe for the
+application to use the configured credential. A secret server API key must not
+be shipped in public JavaScript.
+
+```js
+import { PQBrowserClient } from "pq-befu/browser";
+
+const pq = new PQBrowserClient({
+  apiKey: runtimeConfig.pqApiKey,
+  baseUrl: runtimeConfig.pqBaseUrl,
+});
+
+try {
+  await runAction();
+} catch (err) {
+  await pq.captureException(err, { environment: runtimeConfig.environment });
+  throw err;
+}
+```
+
+### Agent instruction
+
+```text
+This is a browser, worker, or Deno app. Use PQBrowserClient from
+pq-befu/browser and initialize it at the project's existing runtime-config
+boundary. Before adding it, confirm that the configured credential is intended
+to be public; never embed a secret server API key in client code. Use
+captureException for caught errors, re-throw the original error, and preserve
+the existing user experience. Document the public configuration strategy and
+run checks.
+```
+
+## Rules for every agent
+
+- Use only documented `pq-befu` imports and APIs.
+- Do not send passwords, tokens, authorization headers, or full request bodies
+  in `extra`, `metadata`, or error messages.
+- Use `captureException(err, context)` for caught `Error` objects; use
+  `captureError({ message, errorType, ... })` for errors without an `Error`.
+- Call `await pq.flush()` before a process that has explicit shutdown handling
+  exits, so queued asynchronous reports are sent.
