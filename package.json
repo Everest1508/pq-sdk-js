@@ -1,0 +1,62 @@
+{
+  "name": "pq-befu",
+  "version": "0.1.0",
+  "description": "Node.js SDK for the PQ Platform — error tracking, feedback, and ticketing. Works with Express, Fastify, Koa, NestJS, or any Node.js app.",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./browser": "./lib/browser.js",
+    "./preload": "./preload.js",
+    "./integrations/express": "./lib/integrations/express.js",
+    "./integrations/fastify": "./lib/integrations/fastify.js",
+    "./integrations/koa": "./lib/integrations/koa.js",
+    "./integrations/nestjs": "./lib/integrations/nestjs.js",
+    "./integrations/electron": "./lib/integrations/electron.js",
+    "./client": "./lib/client.js",
+    "./hooks": "./lib/hooks.js"
+  },
+  "files": [
+    "lib",
+    "preload.js"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "pq",
+    "quality",
+    "error-tracking",
+    "feedback",
+    "ticketing",
+    "express",
+    "fastify",
+    "koa",
+    "nestjs",
+    "sdk",
+    "monitoring"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "koa": {
+      "optional": true
+    },
+    "@nestjs/common": {
+      "optional": true
+    },
+    "electron": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "express": "^4.19.2"
+  }
+}
