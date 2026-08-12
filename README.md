@@ -6,6 +6,9 @@ Zero runtime dependencies (uses only Node's built-in `http`/`https`). Works with
 
 The JS counterpart of the Python `pq-befu` package.
 
+Using an AI coding agent? See [copy/paste integration prompts](AGENT_PROMPTS.md)
+for Express, Fastify, Koa, NestJS, Electron, and browser applications.
+
 ## Install
 
 ```bash
